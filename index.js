@@ -2,206 +2,159 @@ const express = require("express");
 const sql = require("mssql");
 
 const app = express();
-app.use(express.json());
 
-// ✅ (Opcional pero recomendado) CORS simple
+// --- Middleware
+app.use(express.json({ limit: "10mb" }));
+
+// CORS simple (para que tu web mi-primera-web pueda llamar al backend)
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*"); // luego lo restringimos a tu dominio
+  res.setHeader("Access-Control-Allow-Origin", "*"); // si quieres, luego lo restringimos a tu dominio
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
 
-// ✅ Render usa PORT
-const PORT = process.env.PORT || 10000;
+// --- Config SQL Server desde variables de entorno (Render Environment)
+function getSqlConfig() {
+  return {
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    server: process.env.DB_SERVER,
+    port: parseInt(process.env.DB_PORT || "1433", 10),
+    database: process.env.DB_NAME,
+    options: {
+      encrypt: false,              // usualmente false para SQL Server on-prem
+      trustServerCertificate: true // evita errores de certificado
+    },
+    pool: {
+      max: 10,
+      min: 0,
+      idleTimeoutMillis: 30000
+    },
+    requestTimeout: 120000
+  };
+}
 
-// ✅ Config por variables de entorno (las que ya creaste en Render)
-const dbConfig = {
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  server: process.env.DB_SERVER,
-  port: Number(process.env.DB_PORT || 1433),
-  database: process.env.DB_NAME,
-  options: {
-    encrypt: false, // en on-prem normalmente false
-    trustServerCertificate: true,
-  },
-  pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
-};
-
-let poolPromise;
-function getPool() {
-  if (!poolPromise) poolPromise = sql.connect(dbConfig);
+// --- Conexión reutilizable (pool)
+let poolPromise = null;
+async function getPool() {
+  if (!poolPromise) {
+    poolPromise = sql.connect(getSqlConfig());
+  }
   return poolPromise;
 }
 
-// ✅ Health
-app.get("/", (req, res) => res.send("Backend activo ✅"));
-app.get("/health", (req, res) => res.json({ ok: true }));
+// --- Rutas base
+app.get("/health", (req, res) => {
+  res.json({ ok: true });
+});
 
-// ✅ Test DB
 app.get("/test-db", async (req, res) => {
   try {
     const pool = await getPool();
-    const result = await pool.request().query("SELECT 1 as ok");
+    const result = await pool.request().query("SELECT 1 AS ok");
     res.json({ ok: true, result: result.recordset });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
+  } catch (err) {
+    console.error("test-db error:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-/* =========================================================
-   ✅ SABANA_RUTAS (lectura)
-   Tabla: dbo.sabana_rutas
-   Columnas (según tu captura): id, created_at, año, mes, [Segmento Operación], Proveedor, [Código Ruta], Estado
-========================================================= */
-app.get("/sabana_rutas", async (req, res) => {
-  try {
-    const { anio, mes } = req.query;
-
-    let where = [];
-    if (anio) where.push("año = @anio");
-    if (mes) where.push("UPPER(mes) = UPPER(@mes)");
-
-    const sqlWhere = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
-    const pool = await getPool();
-    const request = pool.request();
-    if (anio) request.input("anio", sql.Int, Number(anio));
-    if (mes) request.input("mes", sql.VarChar(50), String(mes));
-
-    const q = `
-      SELECT *
-      FROM dbo.sabana_rutas
-      ${sqlWhere}
-      ORDER BY id DESC
-    `;
-
-    const result = await request.query(q);
-    res.json({ ok: true, data: result.recordset });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
-  }
-});
-
-/* =========================================================
-   ✅ RECEPCION_CERTIFICADOS
-   Tabla: dbo.recepcion_certificados
-   Soporta:
-   - POST: insertar registros (varios días) con el mismo id_grupo
-   - GET por id_grupo (para area_operativa)
-   - DELETE por id_grupo (para botón ELIMINAR)
-========================================================= */
-
-// ✅ Obtener siguiente id_grupo (máximo + 1)
+// --- Opcional: next-id-grupo
+// Devuelve el próximo id_grupo basado en MAX(id_grupo)+1
 app.get("/next-id-grupo", async (req, res) => {
   try {
     const pool = await getPool();
-    const r = await pool
-      .request()
-      .query("SELECT ISNULL(MAX(id_grupo), 0) + 1 as nextId FROM dbo.recepcion_certificados");
-    res.json({ ok: true, nextId: r.recordset[0].nextId });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
+    const q = `
+      SELECT ISNULL(MAX(id_grupo), 0) + 1 AS next_id_grupo
+      FROM dbo.recepcion_certificados
+    `;
+    const r = await pool.request().query(q);
+    res.json({ ok: true, id_grupo: r.recordset?.[0]?.next_id_grupo || 1 });
+  } catch (err) {
+    console.error("next-id-grupo error:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// ✅ Insertar registros (array)
-app.post("/recepcion_certificados", async (req, res) => {
+// --- ✅ ESTE ENDPOINT ES EL QUE TE FALTA (por eso te daba 404)
+app.post("/recepcion-certificados", async (req, res) => {
   try {
-    const rows = req.body;
+    const { id_grupo, registros } = req.body || {};
 
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ ok: false, error: "Body debe ser un array con registros" });
+    if (!Array.isArray(registros) || registros.length === 0) {
+      return res.status(400).json({ ok: false, error: "Body inválido: registros debe ser un array con datos." });
     }
 
     const pool = await getPool();
+    const transaction = new sql.Transaction(pool);
 
-    // Insert uno por uno (simple y confiable)
-    // Luego si quieres lo optimizamos a bulk insert.
-    for (const r of rows) {
-      const request = pool.request();
+    await transaction.begin();
 
-      request.input("fecha_creacion", sql.Date, r.fecha_creacion ? new Date(r.fecha_creacion) : new Date());
-      request.input("anio", sql.Int, Number(r.año));
-      request.input("mes", sql.NVarChar(255), r.mes);
-      request.input("numero_de_contrato_oc", sql.NVarChar(255), r.numero_de_contrato_oc);
-      request.input("numero_ruta", sql.NVarChar(255), r.numero_ruta);
-      request.input("fecha_servicio", sql.Date, new Date(r.fecha_servicio));
-      request.input("placa_recorrido_1", sql.NVarChar(255), r.placa_recorrido_1 ?? null);
-      request.input("placa_recorrido_2", sql.NVarChar(255), r.placa_recorrido_2 ?? null);
-      request.input("observacion", sql.NVarChar(255), r.observacion ?? null);
-      request.input("observacion_general", sql.NVarChar(255), r.observacion_general ?? null);
-      request.input("responsable", sql.NVarChar(255), r.responsable ?? null);
-      request.input("estado", sql.NVarChar(255), r.estado ?? null);
+    try {
+      for (const row of registros) {
+        const r = new sql.Request(transaction);
 
-      request.input("vehiculo1", sql.NVarChar(255), r.vehiculo1 ?? null);
-      request.input("vehiculo2", sql.NVarChar(255), r.vehiculo2 ?? null);
+        // Ajusta nombres EXACTOS a tu tabla dbo.recepcion_certificados (según tu captura)
+        r.input("fecha_creacion", sql.Date, row.fecha_creacion ? new Date(row.fecha_creacion) : new Date());
+        r.input("anio", sql.Int, row.año ?? row.anio ?? null);
+        r.input("mes", sql.NVarChar(255), row.mes ?? null);
+        r.input("numero_de_contrato_oc", sql.NVarChar(255), row.numero_de_contrato_oc ?? null);
+        r.input("numero_ruta", sql.NVarChar(255), row.numero_ruta ?? null);
+        r.input("fecha_servicio", sql.Date, row.fecha_servicio ? new Date(row.fecha_servicio) : null);
+        r.input("placa_recorrido_1", sql.NVarChar(255), row.placa_recorrido_1 ?? null);
+        r.input("placa_recorrido_2", sql.NVarChar(255), row.placa_recorrido_2 ?? null);
+        r.input("observacion", sql.NVarChar(255), row.observacion ?? null);
+        r.input("observacion_general", sql.NVarChar(255), row.observacion_general ?? null);
+        r.input("responsable", sql.NVarChar(255), row.responsable ?? null);
+        r.input("estado", sql.NVarChar(255), row.estado ?? null);
+        r.input("vehiculo1", sql.NVarChar(255), row.vehiculo1 ?? null);
+        r.input("vehiculo2", sql.NVarChar(255), row.vehiculo2 ?? null);
+        r.input("id_grupo", sql.Int, row.id_grupo ?? id_grupo ?? null);
+        r.input("maximo_transportado", sql.Int, row.maximo_transportado ?? null);
+        r.input("ocupacion_0_r1", sql.NVarChar(255), row.ocupacion_0_r1 ?? null);
+        r.input("ocupacion_0_r2", sql.NVarChar(255), row.ocupacion_0_r2 ?? null);
 
-      request.input("id_grupo", sql.Int, Number(r.id_grupo));
-      request.input("maximo_transportado", sql.Int, r.maximo_transportado ?? null);
+        const insertQ = `
+          INSERT INTO dbo.recepcion_certificados
+          (
+            fecha_creacion, año, mes, numero_de_contrato_oc, numero_ruta, fecha_servicio,
+            placa_recorrido_1, placa_recorrido_2, observacion, observacion_general,
+            responsable, estado, vehiculo1, vehiculo2, id_grupo, maximo_transportado,
+            ocupacion_0_r1, ocupacion_0_r2
+          )
+          VALUES
+          (
+            @fecha_creacion, @anio, @mes, @numero_de_contrato_oc, @numero_ruta, @fecha_servicio,
+            @placa_recorrido_1, @placa_recorrido_2, @observacion, @observacion_general,
+            @responsable, @estado, @vehiculo1, @vehiculo2, @id_grupo, @maximo_transportado,
+            @ocupacion_0_r1, @ocupacion_0_r2
+          )
+        `;
 
-      request.input("ocupacion_0_r1", sql.NVarChar(255), r.ocupacion_0_r1 ?? null);
-      request.input("ocupacion_0_r2", sql.NVarChar(255), r.ocupacion_0_r2 ?? null);
+        await r.query(insertQ);
+      }
 
-      await request.query(`
-        INSERT INTO dbo.recepcion_certificados
-        (fecha_creacion, año, mes, numero_de_contrato_oc, numero_ruta, fecha_servicio,
-         placa_recorrido_1, placa_recorrido_2, observacion, observacion_general, responsable, estado,
-         vehiculo1, vehiculo2, id_grupo, maximo_transportado, ocupacion_0_r1, ocupacion_0_r2)
-        VALUES
-        (@fecha_creacion, @anio, @mes, @numero_de_contrato_oc, @numero_ruta, @fecha_servicio,
-         @placa_recorrido_1, @placa_recorrido_2, @observacion, @observacion_general, @responsable, @estado,
-         @vehiculo1, @vehiculo2, @id_grupo, @maximo_transportado, @ocupacion_0_r1, @ocupacion_0_r2)
-      `);
+      await transaction.commit();
+      res.json({ ok: true, inserted: registros.length, id_grupo: id_grupo ?? registros[0]?.id_grupo ?? null });
+
+    } catch (e) {
+      await transaction.rollback();
+      throw e;
     }
 
-    res.json({ ok: true, inserted: rows.length });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
+  } catch (err) {
+    console.error("POST /recepcion-certificados error:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// ✅ Consultar por id_grupo
-app.get("/recepcion_certificados/grupo/:id_grupo", async (req, res) => {
-  try {
-    const id_grupo = Number(req.params.id_grupo);
-    const pool = await getPool();
-
-    const result = await pool
-      .request()
-      .input("id_grupo", sql.Int, id_grupo)
-      .query(`
-        SELECT *
-        FROM dbo.recepcion_certificados
-        WHERE id_grupo = @id_grupo
-        ORDER BY fecha_servicio ASC
-      `);
-
-    res.json({ ok: true, data: result.recordset });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
-  }
+// --- 404 handler (para que se vea claro cuando falta algo)
+app.use((req, res) => {
+  res.status(404).json({ ok: false, error: "Ruta no encontrada", path: req.path });
 });
 
-// ✅ Eliminar todo el grupo
-app.delete("/recepcion_certificados/grupo/:id_grupo", async (req, res) => {
-  try {
-    const id_grupo = Number(req.params.id_grupo);
-    const pool = await getPool();
-
-    const result = await pool
-      .request()
-      .input("id_grupo", sql.Int, id_grupo)
-      .query(`DELETE FROM dbo.recepcion_certificados WHERE id_grupo = @id_grupo`);
-
-    res.json({ ok: true, deleted: result.rowsAffected?.[0] ?? 0 });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log("Servidor corriendo en puerto", PORT);
-});
+// --- Listen
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log("Servidor corriendo en puerto", PORT));
