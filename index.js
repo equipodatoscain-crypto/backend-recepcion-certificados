@@ -8,7 +8,7 @@ app.use(express.json({ limit: "10mb" }));
 
 // CORS simple (para que tu web mi-primera-web pueda llamar al backend)
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*"); // si quieres, luego lo restringimos a tu dominio
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.sendStatus(200);
@@ -24,8 +24,8 @@ function getSqlConfig() {
     port: parseInt(process.env.DB_PORT || "1433", 10),
     database: process.env.DB_NAME,
     options: {
-      encrypt: false,              // usualmente false para SQL Server on-prem
-      trustServerCertificate: true // evita errores de certificado
+      encrypt: false,
+      trustServerCertificate: true
     },
     pool: {
       max: 10,
@@ -45,16 +45,19 @@ async function getPool() {
   return poolPromise;
 }
 
-/* =====================================================
-   ✅ NUEVO: helper para cédulas (INT)
-===================================================== */
+/* =========================
+   Helpers
+========================= */
 function toIntOrNull(v) {
   const s = (v ?? "").toString().trim();
   if (!s) return null;
   const n = Number(s);
   if (!Number.isFinite(n)) return null;
-  // si quieres solo enteros:
   return Math.trunc(n);
+}
+
+function upper(v) {
+  return (v ?? "").toString().trim().toUpperCase();
 }
 
 // --- Rutas base
@@ -74,7 +77,6 @@ app.get("/test-db", async (req, res) => {
 });
 
 // --- Opcional: next-id-grupo
-// Devuelve el próximo id_grupo basado en MAX(id_grupo)+1
 app.get("/next-id-grupo", async (req, res) => {
   try {
     const pool = await getPool();
@@ -91,20 +93,15 @@ app.get("/next-id-grupo", async (req, res) => {
 });
 
 /* =====================================================
-   ✅ NUEVO: ENDPOINTS PARA ESTADOS
-   Tablas:
-   - conductores (cedulaconductor, estado)
-   - aar         (cedulaaar, estado)
+   ✅ ENDPOINTS PARA CRUCES (CONDUCTORES / AAR / VEHICULOS)
 ===================================================== */
 
-// 🔎 Estado CONDUCTOR por cédula
+// CONDUCTORES: si no existe => SIN DOCUMENTOS
 app.get("/estado-conductor/:cedula", async (req, res) => {
   try {
     const cedula = toIntOrNull(req.params.cedula);
 
-    if (cedula === null) {
-      return res.json({ ok: true, estado: null });
-    }
+    if (cedula === null) return res.json({ ok: true, estado: "SIN DOCUMENTOS" });
 
     const pool = await getPool();
     const result = await pool.request()
@@ -115,8 +112,12 @@ app.get("/estado-conductor/:cedula", async (req, res) => {
         WHERE cedulaconductor = @cedula
       `);
 
-    const estado = result.recordset?.[0]?.estado ?? null;
-    return res.json({ ok: true, estado });
+    if (!result.recordset || result.recordset.length === 0) {
+      return res.json({ ok: true, estado: "SIN DOCUMENTOS" });
+    }
+
+    const estado = upper(result.recordset[0].estado);
+    return res.json({ ok: true, estado: estado || "SIN DOCUMENTOS" });
 
   } catch (err) {
     console.error("GET /estado-conductor error:", err);
@@ -124,14 +125,12 @@ app.get("/estado-conductor/:cedula", async (req, res) => {
   }
 });
 
-// 🔎 Estado AAR por cédula
+// AAR: si no existe => SIN DOCUMENTOS
 app.get("/estado-aar/:cedula", async (req, res) => {
   try {
     const cedula = toIntOrNull(req.params.cedula);
 
-    if (cedula === null) {
-      return res.json({ ok: true, estado: null });
-    }
+    if (cedula === null) return res.json({ ok: true, estado: "SIN DOCUMENTOS" });
 
     const pool = await getPool();
     const result = await pool.request()
@@ -142,8 +141,12 @@ app.get("/estado-aar/:cedula", async (req, res) => {
         WHERE cedulaaar = @cedula
       `);
 
-    const estado = result.recordset?.[0]?.estado ?? null;
-    return res.json({ ok: true, estado });
+    if (!result.recordset || result.recordset.length === 0) {
+      return res.json({ ok: true, estado: "SIN DOCUMENTOS" });
+    }
+
+    const estado = upper(result.recordset[0].estado);
+    return res.json({ ok: true, estado: estado || "SIN DOCUMENTOS" });
 
   } catch (err) {
     console.error("GET /estado-aar error:", err);
@@ -151,7 +154,46 @@ app.get("/estado-aar/:cedula", async (req, res) => {
   }
 });
 
-// --- ✅ ESTE ENDPOINT ES EL QUE TE FALTA (por eso te daba 404)
+// VEHICULOS: drive=SI aprobado, drive=NO no aprobado. Si no existe => SIN DOCUMENTOS + no aprobado
+app.get("/vehiculo/:placa", async (req, res) => {
+  try {
+    const placa = upper(req.params.placa).replace(/[^A-Z0-9]/g, "");
+    if (!placa) return res.json({ ok: true, exists: false, placa: null, drive: null, aprobado: false, estado: "SIN DOCUMENTOS" });
+
+    const pool = await getPool();
+    const result = await pool.request()
+      .input("placa", sql.VarChar(20), placa)
+      .query(`
+        SELECT TOP 1 placa, drive
+        FROM dbo.vehiculos
+        WHERE placa = @placa
+      `);
+
+    if (!result.recordset || result.recordset.length === 0) {
+      return res.json({ ok: true, exists: false, placa, drive: null, aprobado: false, estado: "SIN DOCUMENTOS" });
+    }
+
+    const drive = upper(result.recordset[0].drive);
+    const aprobado = drive === "SI";
+
+    return res.json({
+      ok: true,
+      exists: true,
+      placa,
+      drive: drive || null,
+      aprobado,
+      estado: aprobado ? "APROBADO" : "NO APROBADO"
+    });
+
+  } catch (err) {
+    console.error("GET /vehiculo error:", err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/* =====================================================
+   ✅ GUARDAR RECEPCION (se mantiene + guarda conductor/aar)
+===================================================== */
 app.post("/recepcion-certificados", async (req, res) => {
   try {
     const { id_grupo, registros } = req.body || {};
@@ -169,7 +211,6 @@ app.post("/recepcion-certificados", async (req, res) => {
       for (const row of registros) {
         const r = new sql.Request(transaction);
 
-        // Ajusta nombres EXACTOS a tu tabla dbo.recepcion_certificados (según tu captura)
         r.input("fecha_creacion", sql.Date, row.fecha_creacion ? new Date(row.fecha_creacion) : new Date());
         r.input("anio", sql.Int, row.año ?? row.anio ?? null);
         r.input("mes", sql.NVarChar(255), row.mes ?? null);
@@ -189,9 +230,7 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("ocupacion_0_r1", sql.NVarChar(255), row.ocupacion_0_r1 ?? null);
         r.input("ocupacion_0_r2", sql.NVarChar(255), row.ocupacion_0_r2 ?? null);
 
-        /* =====================================================
-           ✅ NUEVO: CAMPOS PARA GUARDAR (INT) conductor1..5 y aar1..5
-===================================================== */
+        // ✅ nuevos
         r.input("conductor1", sql.Int, row.conductor1 ?? null);
         r.input("conductor2", sql.Int, row.conductor2 ?? null);
         r.input("conductor3", sql.Int, row.conductor3 ?? null);
@@ -244,7 +283,7 @@ app.post("/recepcion-certificados", async (req, res) => {
   }
 });
 
-// --- 404 handler (para que se vea claro cuando falta algo)
+// --- 404 handler
 app.use((req, res) => {
   res.status(404).json({ ok: false, error: "Ruta no encontrada", path: req.path });
 });
