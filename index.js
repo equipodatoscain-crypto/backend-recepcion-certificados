@@ -45,6 +45,18 @@ async function getPool() {
   return poolPromise;
 }
 
+/* =====================================================
+   ✅ NUEVO: helper para cédulas (INT)
+===================================================== */
+function toIntOrNull(v) {
+  const s = (v ?? "").toString().trim();
+  if (!s) return null;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return null;
+  // si quieres solo enteros:
+  return Math.trunc(n);
+}
+
 // --- Rutas base
 app.get("/health", (req, res) => {
   res.json({ ok: true });
@@ -75,6 +87,67 @@ app.get("/next-id-grupo", async (req, res) => {
   } catch (err) {
     console.error("next-id-grupo error:", err);
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/* =====================================================
+   ✅ NUEVO: ENDPOINTS PARA ESTADOS
+   Tablas:
+   - conductores (cedulaconductor, estado)
+   - aar         (cedulaaar, estado)
+===================================================== */
+
+// 🔎 Estado CONDUCTOR por cédula
+app.get("/estado-conductor/:cedula", async (req, res) => {
+  try {
+    const cedula = toIntOrNull(req.params.cedula);
+
+    if (cedula === null) {
+      return res.json({ ok: true, estado: null });
+    }
+
+    const pool = await getPool();
+    const result = await pool.request()
+      .input("cedula", sql.Int, cedula)
+      .query(`
+        SELECT TOP 1 estado
+        FROM dbo.conductores
+        WHERE cedulaconductor = @cedula
+      `);
+
+    const estado = result.recordset?.[0]?.estado ?? null;
+    return res.json({ ok: true, estado });
+
+  } catch (err) {
+    console.error("GET /estado-conductor error:", err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 🔎 Estado AAR por cédula
+app.get("/estado-aar/:cedula", async (req, res) => {
+  try {
+    const cedula = toIntOrNull(req.params.cedula);
+
+    if (cedula === null) {
+      return res.json({ ok: true, estado: null });
+    }
+
+    const pool = await getPool();
+    const result = await pool.request()
+      .input("cedula", sql.Int, cedula)
+      .query(`
+        SELECT TOP 1 estado
+        FROM dbo.aar
+        WHERE cedulaaar = @cedula
+      `);
+
+    const estado = result.recordset?.[0]?.estado ?? null;
+    return res.json({ ok: true, estado });
+
+  } catch (err) {
+    console.error("GET /estado-aar error:", err);
+    return res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -116,20 +189,41 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("ocupacion_0_r1", sql.NVarChar(255), row.ocupacion_0_r1 ?? null);
         r.input("ocupacion_0_r2", sql.NVarChar(255), row.ocupacion_0_r2 ?? null);
 
+        /* =====================================================
+           ✅ NUEVO: CAMPOS PARA GUARDAR (INT) conductor1..5 y aar1..5
+===================================================== */
+        r.input("conductor1", sql.Int, row.conductor1 ?? null);
+        r.input("conductor2", sql.Int, row.conductor2 ?? null);
+        r.input("conductor3", sql.Int, row.conductor3 ?? null);
+        r.input("conductor4", sql.Int, row.conductor4 ?? null);
+        r.input("conductor5", sql.Int, row.conductor5 ?? null);
+
+        r.input("aar1", sql.Int, row.aar1 ?? null);
+        r.input("aar2", sql.Int, row.aar2 ?? null);
+        r.input("aar3", sql.Int, row.aar3 ?? null);
+        r.input("aar4", sql.Int, row.aar4 ?? null);
+        r.input("aar5", sql.Int, row.aar5 ?? null);
+
         const insertQ = `
           INSERT INTO dbo.recepcion_certificados
           (
             fecha_creacion, año, mes, numero_de_contrato_oc, numero_ruta, fecha_servicio,
             placa_recorrido_1, placa_recorrido_2, observacion, observacion_general,
             responsable, estado, vehiculo1, vehiculo2, id_grupo, maximo_transportado,
-            ocupacion_0_r1, ocupacion_0_r2
+            ocupacion_0_r1, ocupacion_0_r2,
+
+            conductor1, conductor2, conductor3, conductor4, conductor5,
+            aar1, aar2, aar3, aar4, aar5
           )
           VALUES
           (
             @fecha_creacion, @anio, @mes, @numero_de_contrato_oc, @numero_ruta, @fecha_servicio,
             @placa_recorrido_1, @placa_recorrido_2, @observacion, @observacion_general,
             @responsable, @estado, @vehiculo1, @vehiculo2, @id_grupo, @maximo_transportado,
-            @ocupacion_0_r1, @ocupacion_0_r2
+            @ocupacion_0_r1, @ocupacion_0_r2,
+
+            @conductor1, @conductor2, @conductor3, @conductor4, @conductor5,
+            @aar1, @aar2, @aar3, @aar4, @aar5
           )
         `;
 
