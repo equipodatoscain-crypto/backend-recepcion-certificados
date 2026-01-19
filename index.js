@@ -6,7 +6,7 @@ const app = express();
 // --- Middleware
 app.use(express.json({ limit: "10mb" }));
 
-// CORS simple (para que tu web mi-primera-web pueda llamar al backend)
+// CORS simple
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
@@ -15,7 +15,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// --- Config SQL Server desde variables de entorno (Render Environment)
+// --- Config SQL Server (Render Environment)
 function getSqlConfig() {
   return {
     user: process.env.DB_USER,
@@ -27,27 +27,19 @@ function getSqlConfig() {
       encrypt: false,
       trustServerCertificate: true
     },
-    pool: {
-      max: 10,
-      min: 0,
-      idleTimeoutMillis: 30000
-    },
+    pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
     requestTimeout: 120000
   };
 }
 
-// --- Conexión reutilizable (pool)
+// --- Pool
 let poolPromise = null;
 async function getPool() {
-  if (!poolPromise) {
-    poolPromise = sql.connect(getSqlConfig());
-  }
+  if (!poolPromise) poolPromise = sql.connect(getSqlConfig());
   return poolPromise;
 }
 
-/* =========================
-   Helpers
-========================= */
+// Helpers
 function toIntOrNull(v) {
   const s = (v ?? "").toString().trim();
   if (!s) return null;
@@ -55,15 +47,12 @@ function toIntOrNull(v) {
   if (!Number.isFinite(n)) return null;
   return Math.trunc(n);
 }
-
 function upper(v) {
   return (v ?? "").toString().trim().toUpperCase();
 }
 
 // --- Rutas base
-app.get("/health", (req, res) => {
-  res.json({ ok: true });
-});
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.get("/test-db", async (req, res) => {
   try {
@@ -76,7 +65,6 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
-// --- Opcional: next-id-grupo
 app.get("/next-id-grupo", async (req, res) => {
   try {
     const pool = await getPool();
@@ -93,106 +81,65 @@ app.get("/next-id-grupo", async (req, res) => {
 });
 
 /* =====================================================
-   ✅ ENDPOINTS PARA CRUCES (CONDUCTORES / AAR / VEHICULOS)
+   ✅ NUEVO: ENDPOINTS DE EXISTENCIA (SIN TRAER ESTADO)
 ===================================================== */
 
-// CONDUCTORES: si no existe => SIN DOCUMENTOS
-app.get("/estado-conductor/:cedula", async (req, res) => {
-  try {
-    const cedula = toIntOrNull(req.params.cedula);
-
-    if (cedula === null) return res.json({ ok: true, estado: "SIN DOCUMENTOS" });
-
-    const pool = await getPool();
-    const result = await pool.request()
-      .input("cedula", sql.Int, cedula)
-      .query(`
-        SELECT TOP 1 estado
-        FROM dbo.conductores
-        WHERE cedulaconductor = @cedula
-      `);
-
-    if (!result.recordset || result.recordset.length === 0) {
-      return res.json({ ok: true, estado: "SIN DOCUMENTOS" });
-    }
-
-    const estado = upper(result.recordset[0].estado);
-    return res.json({ ok: true, estado: estado || "SIN DOCUMENTOS" });
-
-  } catch (err) {
-    console.error("GET /estado-conductor error:", err);
-    return res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// AAR: si no existe => SIN DOCUMENTOS
-app.get("/estado-aar/:cedula", async (req, res) => {
-  try {
-    const cedula = toIntOrNull(req.params.cedula);
-
-    if (cedula === null) return res.json({ ok: true, estado: "SIN DOCUMENTOS" });
-
-    const pool = await getPool();
-    const result = await pool.request()
-      .input("cedula", sql.Int, cedula)
-      .query(`
-        SELECT TOP 1 estado
-        FROM dbo.aar
-        WHERE cedulaaar = @cedula
-      `);
-
-    if (!result.recordset || result.recordset.length === 0) {
-      return res.json({ ok: true, estado: "SIN DOCUMENTOS" });
-    }
-
-    const estado = upper(result.recordset[0].estado);
-    return res.json({ ok: true, estado: estado || "SIN DOCUMENTOS" });
-
-  } catch (err) {
-    console.error("GET /estado-aar error:", err);
-    return res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// VEHICULOS: drive=SI aprobado, drive=NO no aprobado. Si no existe => SIN DOCUMENTOS + no aprobado
-app.get("/vehiculo/:placa", async (req, res) => {
+// vehiculos: existe por placa
+app.get("/existe-vehiculo/:placa", async (req, res) => {
   try {
     const placa = upper(req.params.placa).replace(/[^A-Z0-9]/g, "");
-    if (!placa) return res.json({ ok: true, exists: false, placa: null, drive: null, aprobado: false, estado: "SIN DOCUMENTOS" });
+    if (!placa) return res.json({ ok: true, exists: false });
 
     const pool = await getPool();
-    const result = await pool.request()
+    const r = await pool.request()
       .input("placa", sql.VarChar(20), placa)
-      .query(`
-        SELECT TOP 1 placa, drive
-        FROM dbo.vehiculos
-        WHERE placa = @placa
-      `);
+      .query(`SELECT TOP 1 placa FROM dbo.vehiculos WHERE placa = @placa`);
 
-    if (!result.recordset || result.recordset.length === 0) {
-      return res.json({ ok: true, exists: false, placa, drive: null, aprobado: false, estado: "SIN DOCUMENTOS" });
-    }
-
-    const drive = upper(result.recordset[0].drive);
-    const aprobado = drive === "SI";
-
-    return res.json({
-      ok: true,
-      exists: true,
-      placa,
-      drive: drive || null,
-      aprobado,
-      estado: aprobado ? "APROBADO" : "NO APROBADO"
-    });
-
+    return res.json({ ok: true, exists: (r.recordset?.length || 0) > 0 });
   } catch (err) {
-    console.error("GET /vehiculo error:", err);
-    return res.status(500).json({ ok: false, error: err.message });
+    console.error("existe-vehiculo error:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// conductores: existe por cedula
+app.get("/existe-conductor/:cedula", async (req, res) => {
+  try {
+    const cedula = toIntOrNull(req.params.cedula);
+    if (cedula === null) return res.json({ ok: true, exists: false });
+
+    const pool = await getPool();
+    const r = await pool.request()
+      .input("cedula", sql.Int, cedula)
+      .query(`SELECT TOP 1 cedulaconductor FROM dbo.conductores WHERE cedulaconductor = @cedula`);
+
+    return res.json({ ok: true, exists: (r.recordset?.length || 0) > 0 });
+  } catch (err) {
+    console.error("existe-conductor error:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// aar: existe por cedula
+app.get("/existe-aar/:cedula", async (req, res) => {
+  try {
+    const cedula = toIntOrNull(req.params.cedula);
+    if (cedula === null) return res.json({ ok: true, exists: false });
+
+    const pool = await getPool();
+    const r = await pool.request()
+      .input("cedula", sql.Int, cedula)
+      .query(`SELECT TOP 1 cedulaaar FROM dbo.aar WHERE cedulaaar = @cedula`);
+
+    return res.json({ ok: true, exists: (r.recordset?.length || 0) > 0 });
+  } catch (err) {
+    console.error("existe-aar error:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
 /* =====================================================
-   ✅ GUARDAR RECEPCION (se mantiene + guarda conductor/aar)
+   ✅ POST /recepcion-certificados (INSERT + campos nuevos)
 ===================================================== */
 app.post("/recepcion-certificados", async (req, res) => {
   try {
@@ -204,7 +151,6 @@ app.post("/recepcion-certificados", async (req, res) => {
 
     const pool = await getPool();
     const transaction = new sql.Transaction(pool);
-
     await transaction.begin();
 
     try {
@@ -230,7 +176,7 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("ocupacion_0_r1", sql.NVarChar(255), row.ocupacion_0_r1 ?? null);
         r.input("ocupacion_0_r2", sql.NVarChar(255), row.ocupacion_0_r2 ?? null);
 
-        // ✅ nuevos
+        // ✅ cédulas a guardar (si ya las tienes en la tabla)
         r.input("conductor1", sql.Int, row.conductor1 ?? null);
         r.input("conductor2", sql.Int, row.conductor2 ?? null);
         r.input("conductor3", sql.Int, row.conductor3 ?? null);
@@ -243,6 +189,19 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("aar4", sql.Int, row.aar4 ?? null);
         r.input("aar5", sql.Int, row.aar5 ?? null);
 
+        // ✅ NUEVO: estados a guardar (los campos que vas a crear)
+        r.input("estadoconductor1", sql.NVarChar(255), row.estadoconductor1 ?? null);
+        r.input("estadoconductor2", sql.NVarChar(255), row.estadoconductor2 ?? null);
+        r.input("estadoconductor3", sql.NVarChar(255), row.estadoconductor3 ?? null);
+        r.input("estadoconductor4", sql.NVarChar(255), row.estadoconductor4 ?? null);
+        r.input("estadoconductor5", sql.NVarChar(255), row.estadoconductor5 ?? null);
+
+        r.input("estadoaar1", sql.NVarChar(255), row.estadoaar1 ?? null);
+        r.input("estadoaar2", sql.NVarChar(255), row.estadoaar2 ?? null);
+        r.input("estadoaar3", sql.NVarChar(255), row.estadoaar3 ?? null);
+        r.input("estadoaar4", sql.NVarChar(255), row.estadoaar4 ?? null);
+        r.input("estadoaar5", sql.NVarChar(255), row.estadoaar5 ?? null);
+
         const insertQ = `
           INSERT INTO dbo.recepcion_certificados
           (
@@ -252,7 +211,10 @@ app.post("/recepcion-certificados", async (req, res) => {
             ocupacion_0_r1, ocupacion_0_r2,
 
             conductor1, conductor2, conductor3, conductor4, conductor5,
-            aar1, aar2, aar3, aar4, aar5
+            aar1, aar2, aar3, aar4, aar5,
+
+            estadoconductor1, estadoconductor2, estadoconductor3, estadoconductor4, estadoconductor5,
+            estadoaar1, estadoaar2, estadoaar3, estadoaar4, estadoaar5
           )
           VALUES
           (
@@ -262,7 +224,10 @@ app.post("/recepcion-certificados", async (req, res) => {
             @ocupacion_0_r1, @ocupacion_0_r2,
 
             @conductor1, @conductor2, @conductor3, @conductor4, @conductor5,
-            @aar1, @aar2, @aar3, @aar4, @aar5
+            @aar1, @aar2, @aar3, @aar4, @aar5,
+
+            @estadoconductor1, @estadoconductor2, @estadoconductor3, @estadoconductor4, @estadoconductor5,
+            @estadoaar1, @estadoaar2, @estadoaar3, @estadoaar4, @estadoaar5
           )
         `;
 
