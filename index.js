@@ -68,8 +68,6 @@ app.get("/next-id-grupo", async (req, res) => {
 
 /* =====================================================
    ✅ VEHICULOS (SOLO EXISTENCIA)
-   - SI NO EXISTE → SIN DOCUMENTOS
-   - SI EXISTE → NO HACER NADA
 ===================================================== */
 app.get("/vehiculo-existe/:placa", async (req, res) => {
   const placa = (req.params.placa || "").toUpperCase().trim();
@@ -119,13 +117,18 @@ app.get("/existe-aar/:cedula", async (req, res) => {
 });
 
 /* =====================================================
-   RECEPCION CERTIFICADOS (SIN CAMBIOS)
+   RECEPCION CERTIFICADOS (✅ AHORA GUARDA CONDUCTORES/AAR Y ESTADOS)
+   ⚠ IMPORTANTE: en SQL Server deben existir estas columnas en dbo.recepcion_certificados:
+   - conductor1..conductor5 (INT)
+   - aar1..aar5 (INT)
+   - estadoconductor1..estadoconductor5 (NVARCHAR)
+   - estadoaar1..estadoaar5 (NVARCHAR)
 ===================================================== */
 app.post("/recepcion-certificados", async (req, res) => {
   try {
     const { id_grupo, registros } = req.body;
     if (!Array.isArray(registros) || registros.length === 0) {
-      return res.status(400).json({ ok: false });
+      return res.status(400).json({ ok: false, error: "No hay registros" });
     }
 
     const pool = await getPool();
@@ -136,6 +139,7 @@ app.post("/recepcion-certificados", async (req, res) => {
       for (const row of registros) {
         const r = new sql.Request(tx);
 
+        // === Campos base ===
         r.input("fecha_creacion", sql.Date, new Date());
         r.input("anio", sql.Int, row.año);
         r.input("mes", sql.NVarChar(50), row.mes);
@@ -153,17 +157,54 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("ocupacion_0_r1", sql.NVarChar(5), row.ocupacion_0_r1);
         r.input("ocupacion_0_r2", sql.NVarChar(5), row.ocupacion_0_r2);
 
+        // === ✅ NUEVO: conductores / aar (INT) ===
+        r.input("conductor1", sql.Int, row.conductor1 ?? null);
+        r.input("conductor2", sql.Int, row.conductor2 ?? null);
+        r.input("conductor3", sql.Int, row.conductor3 ?? null);
+        r.input("conductor4", sql.Int, row.conductor4 ?? null);
+        r.input("conductor5", sql.Int, row.conductor5 ?? null);
+
+        r.input("aar1", sql.Int, row.aar1 ?? null);
+        r.input("aar2", sql.Int, row.aar2 ?? null);
+        r.input("aar3", sql.Int, row.aar3 ?? null);
+        r.input("aar4", sql.Int, row.aar4 ?? null);
+        r.input("aar5", sql.Int, row.aar5 ?? null);
+
+        // === ✅ NUEVO: estados (NVARCHAR) ===
+        r.input("estadoconductor1", sql.NVarChar(50), row.estadoconductor1 ?? null);
+        r.input("estadoconductor2", sql.NVarChar(50), row.estadoconductor2 ?? null);
+        r.input("estadoconductor3", sql.NVarChar(50), row.estadoconductor3 ?? null);
+        r.input("estadoconductor4", sql.NVarChar(50), row.estadoconductor4 ?? null);
+        r.input("estadoconductor5", sql.NVarChar(50), row.estadoconductor5 ?? null);
+
+        r.input("estadoaar1", sql.NVarChar(50), row.estadoaar1 ?? null);
+        r.input("estadoaar2", sql.NVarChar(50), row.estadoaar2 ?? null);
+        r.input("estadoaar3", sql.NVarChar(50), row.estadoaar3 ?? null);
+        r.input("estadoaar4", sql.NVarChar(50), row.estadoaar4 ?? null);
+        r.input("estadoaar5", sql.NVarChar(50), row.estadoaar5 ?? null);
+
+        // === ✅ INSERT con nuevas columnas ===
         await r.query(`
           INSERT INTO dbo.recepcion_certificados (
             fecha_creacion, año, mes, numero_de_contrato_oc, numero_ruta,
             fecha_servicio, placa_recorrido_1, placa_recorrido_2,
             observacion, observacion_general, responsable, estado,
-            id_grupo, maximo_transportado, ocupacion_0_r1, ocupacion_0_r2
+            id_grupo, maximo_transportado, ocupacion_0_r1, ocupacion_0_r2,
+
+            conductor1, conductor2, conductor3, conductor4, conductor5,
+            aar1, aar2, aar3, aar4, aar5,
+            estadoconductor1, estadoconductor2, estadoconductor3, estadoconductor4, estadoconductor5,
+            estadoaar1, estadoaar2, estadoaar3, estadoaar4, estadoaar5
           ) VALUES (
             @fecha_creacion, @anio, @mes, @numero_de_contrato_oc, @numero_ruta,
             @fecha_servicio, @placa_recorrido_1, @placa_recorrido_2,
             @observacion, @observacion_general, @responsable, @estado,
-            @id_grupo, @maximo_transportado, @ocupacion_0_r1, @ocupacion_0_r2
+            @id_grupo, @maximo_transportado, @ocupacion_0_r1, @ocupacion_0_r2,
+
+            @conductor1, @conductor2, @conductor3, @conductor4, @conductor5,
+            @aar1, @aar2, @aar3, @aar4, @aar5,
+            @estadoconductor1, @estadoconductor2, @estadoconductor3, @estadoconductor4, @estadoconductor5,
+            @estadoaar1, @estadoaar2, @estadoaar3, @estadoaar4, @estadoaar5
           )
         `);
       }
