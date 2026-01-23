@@ -20,15 +20,8 @@ function getSqlConfig() {
     server: process.env.DB_SERVER,
     port: parseInt(process.env.DB_PORT || "1433", 10),
     database: process.env.DB_NAME,
-    options: {
-      encrypt: false,
-      trustServerCertificate: true
-    },
-    pool: {
-      max: 10,
-      min: 0,
-      idleTimeoutMillis: 30000
-    },
+    options: { encrypt: false, trustServerCertificate: true },
+    pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
     requestTimeout: 120000
   };
 }
@@ -39,14 +32,11 @@ async function getPool() {
   return poolPromise;
 }
 
-// Helpers
 function normStr(v) {
   return (v ?? "").toString().trim().toUpperCase();
 }
 
-app.get("/health", (req, res) => {
-  res.json({ ok: true });
-});
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.get("/test-db", async (req, res) => {
   try {
@@ -71,59 +61,53 @@ app.get("/next-id-grupo", async (req, res) => {
   }
 });
 
-/* =====================================================
-   ✅ VEHICULOS (SOLO EXISTENCIA)
-===================================================== */
+/* =========================
+   VEHICULOS
+========================= */
 app.get("/vehiculo-existe/:placa", async (req, res) => {
   const placa = (req.params.placa || "").toUpperCase().trim();
-
   try {
     const pool = await getPool();
     const r = await pool.request()
       .input("placa", sql.NVarChar(20), placa)
       .query(`SELECT 1 FROM dbo.vehiculos WHERE placa = @placa`);
-
     res.json({ ok: true, exists: r.recordset.length > 0 });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-/* =====================================================
-   CONDUCTORES
-===================================================== */
+/* =========================
+   CONDUCTORES / AAR
+========================= */
 app.get("/existe-conductor/:cedula", async (req, res) => {
   try {
     const pool = await getPool();
     const r = await pool.request()
       .input("cedula", sql.VarChar(50), req.params.cedula)
       .query(`SELECT 1 FROM dbo.conductores WHERE cedulaconductor = @cedula`);
-
     res.json({ ok: true, exists: r.recordset.length > 0 });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-/* =====================================================
-   AAR
-===================================================== */
 app.get("/existe-aar/:cedula", async (req, res) => {
   try {
     const pool = await getPool();
     const r = await pool.request()
       .input("cedula", sql.VarChar(50), req.params.cedula)
       .query(`SELECT 1 FROM dbo.aar WHERE cedulaaar = @cedula`);
-
     res.json({ ok: true, exists: r.recordset.length > 0 });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-/* =====================================================
+/* =========================
    RECEPCION CERTIFICADOS
-===================================================== */
+   ✅ FIX FECHA COLOMBIA
+========================= */
 app.post("/recepcion-certificados", async (req, res) => {
   try {
     const { id_grupo, registros } = req.body;
@@ -139,8 +123,12 @@ app.post("/recepcion-certificados", async (req, res) => {
       for (const row of registros) {
         const r = new sql.Request(tx);
 
-        // === Campos base ===
-        r.input("fecha_creacion", sql.Date, new Date());
+        // ✅ Fecha Colombia (UTC-5) SOLO FECHA
+        const now = new Date();
+        const colombia = new Date(now.getTime() - (5 * 60 * 60 * 1000));
+
+        r.input("fecha_creacion", sql.Date, colombia);
+
         r.input("anio", sql.Int, row.año);
         r.input("mes", sql.NVarChar(50), row.mes);
         r.input("numero_de_contrato_oc", sql.NVarChar(50), row.numero_de_contrato_oc);
@@ -157,7 +145,6 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("ocupacion_0_r1", sql.NVarChar(5), row.ocupacion_0_r1);
         r.input("ocupacion_0_r2", sql.NVarChar(5), row.ocupacion_0_r2);
 
-        // === conductores / aar (INT) ===
         r.input("conductor1", sql.Int, row.conductor1 ?? null);
         r.input("conductor2", sql.Int, row.conductor2 ?? null);
         r.input("conductor3", sql.Int, row.conductor3 ?? null);
@@ -170,7 +157,6 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("aar4", sql.Int, row.aar4 ?? null);
         r.input("aar5", sql.Int, row.aar5 ?? null);
 
-        // === estados (NVARCHAR) ===
         r.input("estadoconductor1", sql.NVarChar(50), row.estadoconductor1 ?? null);
         r.input("estadoconductor2", sql.NVarChar(50), row.estadoconductor2 ?? null);
         r.input("estadoconductor3", sql.NVarChar(50), row.estadoconductor3 ?? null);
@@ -210,7 +196,6 @@ app.post("/recepcion-certificados", async (req, res) => {
 
       await tx.commit();
       res.json({ ok: true });
-
     } catch (e) {
       await tx.rollback();
       throw e;
@@ -220,15 +205,9 @@ app.post("/recepcion-certificados", async (req, res) => {
   }
 });
 
-/* =====================================================
-   ✅ SABANA_RUTAS
-   - GET  /sabana/list
-   - POST /sabana/replace
-   - GET  /sabana/by-period?anio=&mes=
-   - GET  /certificados/aprobados?anio=&mes=
-===================================================== */
-
-// LISTAR: año/mes + conteo
+/* =========================
+   SABANA
+========================= */
 app.get("/sabana/list", async (req, res) => {
   try {
     const pool = await getPool();
@@ -244,15 +223,12 @@ app.get("/sabana/list", async (req, res) => {
   }
 });
 
-// TRAER SABANA por periodo (para reporte)
 app.get("/sabana/by-period", async (req, res) => {
   try {
     const anio = parseInt(req.query.anio, 10);
     const mes = normStr(req.query.mes);
 
-    if (!anio || !mes) {
-      return res.status(400).json({ ok: false, error: "Faltan anio/mes" });
-    }
+    if (!anio || !mes) return res.status(400).json({ ok: false, error: "Faltan anio/mes" });
 
     const pool = await getPool();
     const r = await pool.request()
@@ -277,7 +253,6 @@ app.get("/sabana/by-period", async (req, res) => {
   }
 });
 
-// REEMPLAZAR SABANA: DELETE + INSERT por lotes en transacción
 app.post("/sabana/replace", async (req, res) => {
   const anio = parseInt(req.body?.anio, 10);
   const mes = normStr(req.body?.mes);
@@ -286,7 +261,6 @@ app.post("/sabana/replace", async (req, res) => {
   if (!anio || !mes) return res.status(400).json({ ok: false, error: "Faltan anio/mes" });
   if (!rows.length) return res.status(400).json({ ok: false, error: "No hay filas para insertar" });
 
-  // Normalizamos filas
   const clean = rows
     .map(r => ({
       contrato: normStr(r.NumeroContrato),
@@ -305,13 +279,11 @@ app.post("/sabana/replace", async (req, res) => {
     await tx.begin();
 
     try {
-      // 1) DELETE del periodo
       await new sql.Request(tx)
         .input("anio", sql.Int, anio)
         .input("mes", sql.VarChar(50), mes)
         .query(`DELETE FROM dbo.sabana_rutas WHERE año=@anio AND mes=@mes`);
 
-      // 2) INSERT por lotes parametrizados
       const BATCH = 500;
       let inserted = 0;
 
@@ -331,38 +303,32 @@ app.post("/sabana/replace", async (req, res) => {
           return `(@anio, @mes, @cont${idx}, @seg${idx}, @prov${idx}, @ruta${idx}, @est${idx})`;
         }).join(",");
 
-        const q = `
+        await reqIns.query(`
           INSERT INTO dbo.sabana_rutas
             (año, mes, [Número Contrato], [Segmento Operación], Proveedor, [Código Ruta], Estado)
           VALUES ${valuesSql};
-        `;
+        `);
 
-        await reqIns.query(q);
         inserted += chunk.length;
       }
 
       await tx.commit();
       res.json({ ok: true, inserted, anio, mes });
-
     } catch (e) {
       await tx.rollback();
       throw e;
     }
-
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// CERTIFICADOS APROBADOS por periodo (para reporte)
+/* ✅ FIX FECHA: devolvemos YYYY-MM-DD */
 app.get("/certificados/aprobados", async (req, res) => {
   try {
     const anio = parseInt(req.query.anio, 10);
     const mes = normStr(req.query.mes);
-
-    if (!anio || !mes) {
-      return res.status(400).json({ ok: false, error: "Faltan anio/mes" });
-    }
+    if (!anio || !mes) return res.status(400).json({ ok: false, error: "Faltan anio/mes" });
 
     const pool = await getPool();
     const r = await pool.request()
@@ -371,7 +337,7 @@ app.get("/certificados/aprobados", async (req, res) => {
       .input("estado", sql.NVarChar(50), "APROBADO")
       .query(`
         SELECT
-          fecha_creacion,
+          CONVERT(varchar(10), fecha_creacion, 23) AS fecha_creacion,
           año,
           mes,
           numero_de_contrato_oc,
@@ -389,11 +355,7 @@ app.get("/certificados/aprobados", async (req, res) => {
   }
 });
 
-/* ===================================================== */
-
-app.use((req, res) => {
-  res.status(404).json({ ok: false });
-});
+app.use((req, res) => res.status(404).json({ ok: false }));
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log("Servidor corriendo en puerto", PORT));
