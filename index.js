@@ -122,7 +122,7 @@ app.get("/existe-aar/:cedula", async (req, res) => {
 });
 
 /* =====================================================
-   RECEPCION CERTIFICADOS (✅ AHORA GUARDA CONDUCTORES/AAR Y ESTADOS)
+   RECEPCION CERTIFICADOS
 ===================================================== */
 app.post("/recepcion-certificados", async (req, res) => {
   try {
@@ -157,7 +157,7 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("ocupacion_0_r1", sql.NVarChar(5), row.ocupacion_0_r1);
         r.input("ocupacion_0_r2", sql.NVarChar(5), row.ocupacion_0_r2);
 
-        // === ✅ NUEVO: conductores / aar (INT) ===
+        // === conductores / aar (INT) ===
         r.input("conductor1", sql.Int, row.conductor1 ?? null);
         r.input("conductor2", sql.Int, row.conductor2 ?? null);
         r.input("conductor3", sql.Int, row.conductor3 ?? null);
@@ -170,7 +170,7 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("aar4", sql.Int, row.aar4 ?? null);
         r.input("aar5", sql.Int, row.aar5 ?? null);
 
-        // === ✅ NUEVO: estados (NVARCHAR) ===
+        // === estados (NVARCHAR) ===
         r.input("estadoconductor1", sql.NVarChar(50), row.estadoconductor1 ?? null);
         r.input("estadoconductor2", sql.NVarChar(50), row.estadoconductor2 ?? null);
         r.input("estadoconductor3", sql.NVarChar(50), row.estadoconductor3 ?? null);
@@ -183,7 +183,6 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("estadoaar4", sql.NVarChar(50), row.estadoaar4 ?? null);
         r.input("estadoaar5", sql.NVarChar(50), row.estadoaar5 ?? null);
 
-        // === ✅ INSERT con nuevas columnas ===
         await r.query(`
           INSERT INTO dbo.recepcion_certificados (
             fecha_creacion, año, mes, numero_de_contrato_oc, numero_ruta,
@@ -222,8 +221,7 @@ app.post("/recepcion-certificados", async (req, res) => {
 });
 
 /* =====================================================
-   ✅ SABANA_RUTAS (NUEVO)
-   Rutas usadas por tu HTML:
+   ✅ SABANA_RUTAS
    - GET  /sabana/list
    - POST /sabana/replace
    - GET  /sabana/by-period?anio=&mes=
@@ -264,6 +262,7 @@ app.get("/sabana/by-period", async (req, res) => {
         SELECT
           año,
           mes,
+          [Número Contrato] AS [Número Contrato],
           [Segmento Operación] AS [Segmento Operación],
           Proveedor,
           [Código Ruta] AS [Código Ruta],
@@ -290,12 +289,13 @@ app.post("/sabana/replace", async (req, res) => {
   // Normalizamos filas
   const clean = rows
     .map(r => ({
+      contrato: normStr(r.NumeroContrato),
       seg: normStr(r.SegmentoOperacion),
       prov: normStr(r.Proveedor),
       ruta: normStr(r.CodigoRuta),
       est: normStr(r.Estado),
     }))
-    .filter(r => r.seg || r.prov || r.ruta || r.est);
+    .filter(r => r.contrato || r.seg || r.prov || r.ruta || r.est);
 
   if (!clean.length) return res.status(400).json({ ok: false, error: "No hay filas válidas" });
 
@@ -323,15 +323,17 @@ app.post("/sabana/replace", async (req, res) => {
         reqIns.input("mes", sql.VarChar(50), mes);
 
         const valuesSql = chunk.map((r, idx) => {
+          reqIns.input(`cont${idx}`, sql.VarChar(50), r.contrato || null);
           reqIns.input(`seg${idx}`, sql.VarChar(50), r.seg);
           reqIns.input(`prov${idx}`, sql.VarChar(50), r.prov);
           reqIns.input(`ruta${idx}`, sql.VarChar(50), r.ruta);
           reqIns.input(`est${idx}`, sql.VarChar(50), r.est);
-          return `(@anio, @mes, @seg${idx}, @prov${idx}, @ruta${idx}, @est${idx})`;
+          return `(@anio, @mes, @cont${idx}, @seg${idx}, @prov${idx}, @ruta${idx}, @est${idx})`;
         }).join(",");
 
         const q = `
-          INSERT INTO dbo.sabana_rutas (año, mes, [Segmento Operación], Proveedor, [Código Ruta], Estado)
+          INSERT INTO dbo.sabana_rutas
+            (año, mes, [Número Contrato], [Segmento Operación], Proveedor, [Código Ruta], Estado)
           VALUES ${valuesSql};
         `;
 
