@@ -263,7 +263,8 @@ app.post("/sabana/replace", async (req, res) => {
 
   const clean = rows
     .map(r => ({
-      contrato: normStr(r.NumeroContrato),
+      // ✅ AJUSTE: aceptar NumeroContrato y también (por si acaso) nombres alternos
+      contrato: normStr(r.NumeroContrato ?? r["Número Contrato"] ?? r["Numero Contrato"]),
       seg: normStr(r.SegmentoOperacion),
       prov: normStr(r.Proveedor),
       ruta: normStr(r.CodigoRuta),
