@@ -39,6 +39,11 @@ async function getPool() {
   return poolPromise;
 }
 
+// Helpers
+function normStr(v) {
+  return (v ?? "").toString().trim().toUpperCase();
+}
+
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
@@ -118,11 +123,6 @@ app.get("/existe-aar/:cedula", async (req, res) => {
 
 /* =====================================================
    RECEPCION CERTIFICADOS (✅ AHORA GUARDA CONDUCTORES/AAR Y ESTADOS)
-   ⚠ IMPORTANTE: en SQL Server deben existir estas columnas en dbo.recepcion_certificados:
-   - conductor1..conductor5 (INT)
-   - aar1..aar5 (INT)
-   - estadoconductor1..estadoconductor5 (NVARCHAR)
-   - estadoaar1..estadoaar5 (NVARCHAR)
 ===================================================== */
 app.post("/recepcion-certificados", async (req, res) => {
   try {
@@ -220,6 +220,174 @@ app.post("/recepcion-certificados", async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+
+/* =====================================================
+   ✅ SABANA_RUTAS (NUEVO)
+   Rutas usadas por tu HTML:
+   - GET  /sabana/list
+   - POST /sabana/replace
+   - GET  /sabana/by-period?anio=&mes=
+   - GET  /certificados/aprobados?anio=&mes=
+===================================================== */
+
+// LISTAR: año/mes + conteo
+app.get("/sabana/list", async (req, res) => {
+  try {
+    const pool = await getPool();
+    const r = await pool.request().query(`
+      SELECT año, mes, COUNT(*) AS registros
+      FROM dbo.sabana_rutas
+      GROUP BY año, mes
+      ORDER BY año DESC, mes ASC
+    `);
+    res.json({ ok: true, data: r.recordset || [] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// TRAER SABANA por periodo (para reporte)
+app.get("/sabana/by-period", async (req, res) => {
+  try {
+    const anio = parseInt(req.query.anio, 10);
+    const mes = normStr(req.query.mes);
+
+    if (!anio || !mes) {
+      return res.status(400).json({ ok: false, error: "Faltan anio/mes" });
+    }
+
+    const pool = await getPool();
+    const r = await pool.request()
+      .input("anio", sql.Int, anio)
+      .input("mes", sql.VarChar(50), mes)
+      .query(`
+        SELECT
+          año,
+          mes,
+          [Segmento Operación] AS [Segmento Operación],
+          Proveedor,
+          [Código Ruta] AS [Código Ruta],
+          Estado
+        FROM dbo.sabana_rutas
+        WHERE año = @anio AND mes = @mes
+      `);
+
+    res.json({ ok: true, data: r.recordset || [] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// REEMPLAZAR SABANA: DELETE + INSERT por lotes en transacción
+app.post("/sabana/replace", async (req, res) => {
+  const anio = parseInt(req.body?.anio, 10);
+  const mes = normStr(req.body?.mes);
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+
+  if (!anio || !mes) return res.status(400).json({ ok: false, error: "Faltan anio/mes" });
+  if (!rows.length) return res.status(400).json({ ok: false, error: "No hay filas para insertar" });
+
+  // Normalizamos filas
+  const clean = rows
+    .map(r => ({
+      seg: normStr(r.SegmentoOperacion),
+      prov: normStr(r.Proveedor),
+      ruta: normStr(r.CodigoRuta),
+      est: normStr(r.Estado),
+    }))
+    .filter(r => r.seg || r.prov || r.ruta || r.est);
+
+  if (!clean.length) return res.status(400).json({ ok: false, error: "No hay filas válidas" });
+
+  try {
+    const pool = await getPool();
+    const tx = new sql.Transaction(pool);
+    await tx.begin();
+
+    try {
+      // 1) DELETE del periodo
+      await new sql.Request(tx)
+        .input("anio", sql.Int, anio)
+        .input("mes", sql.VarChar(50), mes)
+        .query(`DELETE FROM dbo.sabana_rutas WHERE año=@anio AND mes=@mes`);
+
+      // 2) INSERT por lotes parametrizados
+      const BATCH = 500;
+      let inserted = 0;
+
+      for (let i = 0; i < clean.length; i += BATCH) {
+        const chunk = clean.slice(i, i + BATCH);
+
+        const reqIns = new sql.Request(tx);
+        reqIns.input("anio", sql.Int, anio);
+        reqIns.input("mes", sql.VarChar(50), mes);
+
+        const valuesSql = chunk.map((r, idx) => {
+          reqIns.input(`seg${idx}`, sql.VarChar(50), r.seg);
+          reqIns.input(`prov${idx}`, sql.VarChar(50), r.prov);
+          reqIns.input(`ruta${idx}`, sql.VarChar(50), r.ruta);
+          reqIns.input(`est${idx}`, sql.VarChar(50), r.est);
+          return `(@anio, @mes, @seg${idx}, @prov${idx}, @ruta${idx}, @est${idx})`;
+        }).join(",");
+
+        const q = `
+          INSERT INTO dbo.sabana_rutas (año, mes, [Segmento Operación], Proveedor, [Código Ruta], Estado)
+          VALUES ${valuesSql};
+        `;
+
+        await reqIns.query(q);
+        inserted += chunk.length;
+      }
+
+      await tx.commit();
+      res.json({ ok: true, inserted, anio, mes });
+
+    } catch (e) {
+      await tx.rollback();
+      throw e;
+    }
+
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// CERTIFICADOS APROBADOS por periodo (para reporte)
+app.get("/certificados/aprobados", async (req, res) => {
+  try {
+    const anio = parseInt(req.query.anio, 10);
+    const mes = normStr(req.query.mes);
+
+    if (!anio || !mes) {
+      return res.status(400).json({ ok: false, error: "Faltan anio/mes" });
+    }
+
+    const pool = await getPool();
+    const r = await pool.request()
+      .input("anio", sql.Int, anio)
+      .input("mes", sql.VarChar(50), mes)
+      .input("estado", sql.NVarChar(50), "APROBADO")
+      .query(`
+        SELECT
+          fecha_creacion,
+          año,
+          mes,
+          numero_de_contrato_oc,
+          numero_ruta,
+          responsable,
+          estado,
+          observacion_general
+        FROM dbo.recepcion_certificados
+        WHERE año = @anio AND mes = @mes AND estado = @estado
+      `);
+
+    res.json({ ok: true, data: r.recordset || [] });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/* ===================================================== */
 
 app.use((req, res) => {
   res.status(404).json({ ok: false });
