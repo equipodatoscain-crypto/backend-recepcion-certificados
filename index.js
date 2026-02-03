@@ -133,6 +133,10 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("mes", sql.NVarChar(50), row.mes);
         r.input("numero_de_contrato_oc", sql.NVarChar(50), row.numero_de_contrato_oc);
         r.input("numero_ruta", sql.NVarChar(50), row.numero_ruta);
+
+        // ✅ NUEVO: segmento
+        r.input("segmento", sql.NVarChar(50), row.segmento ?? null);
+
         r.input("fecha_servicio", sql.Date, row.fecha_servicio ? new Date(row.fecha_servicio) : null);
         r.input("placa_recorrido_1", sql.NVarChar(20), row.placa_recorrido_1);
         r.input("placa_recorrido_2", sql.NVarChar(20), row.placa_recorrido_2);
@@ -171,7 +175,7 @@ app.post("/recepcion-certificados", async (req, res) => {
 
         await r.query(`
           INSERT INTO dbo.recepcion_certificados (
-            fecha_creacion, año, mes, numero_de_contrato_oc, numero_ruta,
+            fecha_creacion, año, mes, numero_de_contrato_oc, numero_ruta, segmento,
             fecha_servicio, placa_recorrido_1, placa_recorrido_2,
             observacion, observacion_general, responsable, estado,
             id_grupo, maximo_transportado, ocupacion_0_r1, ocupacion_0_r2,
@@ -181,7 +185,7 @@ app.post("/recepcion-certificados", async (req, res) => {
             estadoconductor1, estadoconductor2, estadoconductor3, estadoconductor4, estadoconductor5,
             estadoaar1, estadoaar2, estadoaar3, estadoaar4, estadoaar5
           ) VALUES (
-            @fecha_creacion, @anio, @mes, @numero_de_contrato_oc, @numero_ruta,
+            @fecha_creacion, @anio, @mes, @numero_de_contrato_oc, @numero_ruta, @segmento,
             @fecha_servicio, @placa_recorrido_1, @placa_recorrido_2,
             @observacion, @observacion_general, @responsable, @estado,
             @id_grupo, @maximo_transportado, @ocupacion_0_r1, @ocupacion_0_r2,
@@ -343,6 +347,7 @@ app.get("/certificados/aprobados", async (req, res) => {
           mes,
           numero_de_contrato_oc,
           numero_ruta,
+          segmento,
           responsable,
           estado,
           observacion_general
