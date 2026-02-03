@@ -107,6 +107,7 @@ app.get("/existe-aar/:cedula", async (req, res) => {
 /* =========================
    RECEPCION CERTIFICADOS
    ✅ FIX FECHA COLOMBIA
+   ✅ NUEVO: UT
 ========================= */
 app.post("/recepcion-certificados", async (req, res) => {
   try {
@@ -126,11 +127,24 @@ app.post("/recepcion-certificados", async (req, res) => {
         // ✅ Fecha Colombia (UTC-5) SOLO FECHA
         const now = new Date();
         const colombia = new Date(now.getTime() - (5 * 60 * 60 * 1000));
-
         r.input("fecha_creacion", sql.Date, colombia);
 
         r.input("anio", sql.Int, row.año);
         r.input("mes", sql.NVarChar(50), row.mes);
+
+        // ✅ NUEVO: UT (robusto)
+        const utVal = normStr(
+          row.ut ??
+          row.UT ??
+          row["ut"] ??
+          row["UT"] ??
+          row["u_t"] ??
+          row["U_T"] ??
+          row["Union Temporal"] ??
+          row["UNION TEMPORAL"]
+        );
+        r.input("ut", sql.NVarChar(150), utVal || null);
+
         r.input("numero_de_contrato_oc", sql.NVarChar(50), row.numero_de_contrato_oc);
         r.input("numero_ruta", sql.NVarChar(50), row.numero_ruta);
 
@@ -148,9 +162,6 @@ app.post("/recepcion-certificados", async (req, res) => {
         );
 
         r.input("segmento", sql.NVarChar(50), segmentoVal || null);
-
-        // Si quieres ver en logs qué llega (Render), descomenta:
-        // console.log("SEGMENTO DEBUG =>", { raw: row.segmento, resolved: segmentoVal });
 
         r.input("fecha_servicio", sql.Date, row.fecha_servicio ? new Date(row.fecha_servicio) : null);
         r.input("placa_recorrido_1", sql.NVarChar(20), row.placa_recorrido_1);
@@ -190,7 +201,7 @@ app.post("/recepcion-certificados", async (req, res) => {
 
         await r.query(`
           INSERT INTO dbo.recepcion_certificados (
-            fecha_creacion, año, mes, numero_de_contrato_oc, numero_ruta, segmento,
+            fecha_creacion, año, mes, ut, numero_de_contrato_oc, numero_ruta, segmento,
             fecha_servicio, placa_recorrido_1, placa_recorrido_2,
             observacion, observacion_general, responsable, estado,
             id_grupo, maximo_transportado, ocupacion_0_r1, ocupacion_0_r2,
@@ -200,7 +211,7 @@ app.post("/recepcion-certificados", async (req, res) => {
             estadoconductor1, estadoconductor2, estadoconductor3, estadoconductor4, estadoconductor5,
             estadoaar1, estadoaar2, estadoaar3, estadoaar4, estadoaar5
           ) VALUES (
-            @fecha_creacion, @anio, @mes, @numero_de_contrato_oc, @numero_ruta, @segmento,
+            @fecha_creacion, @anio, @mes, @ut, @numero_de_contrato_oc, @numero_ruta, @segmento,
             @fecha_servicio, @placa_recorrido_1, @placa_recorrido_2,
             @observacion, @observacion_general, @responsable, @estado,
             @id_grupo, @maximo_transportado, @ocupacion_0_r1, @ocupacion_0_r2,
@@ -282,7 +293,6 @@ app.post("/sabana/replace", async (req, res) => {
 
   const clean = rows
     .map(r => ({
-      // ✅ AJUSTE: aceptar NumeroContrato y también (por si acaso) nombres alternos
       contrato: normStr(r.NumeroContrato ?? r["Número Contrato"] ?? r["Numero Contrato"]),
       seg: normStr(r.SegmentoOperacion),
       prov: normStr(r.Proveedor),
@@ -343,7 +353,9 @@ app.post("/sabana/replace", async (req, res) => {
   }
 });
 
-/* ✅ FIX FECHA: devolvemos YYYY-MM-DD */
+/* ✅ FIX FECHA: devolvemos YYYY-MM-DD
+   ✅ NUEVO: incluir ut
+*/
 app.get("/certificados/aprobados", async (req, res) => {
   try {
     const anio = parseInt(req.query.anio, 10);
@@ -360,6 +372,7 @@ app.get("/certificados/aprobados", async (req, res) => {
           CONVERT(varchar(10), fecha_creacion, 23) AS fecha_creacion,
           año,
           mes,
+          ut,
           numero_de_contrato_oc,
           numero_ruta,
           segmento,
