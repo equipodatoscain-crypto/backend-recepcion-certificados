@@ -134,8 +134,23 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("numero_de_contrato_oc", sql.NVarChar(50), row.numero_de_contrato_oc);
         r.input("numero_ruta", sql.NVarChar(50), row.numero_ruta);
 
-        // ✅ NUEVO: segmento
-        r.input("segmento", sql.NVarChar(50), row.segmento ?? null);
+        // ✅ AJUSTE ROBUSTO: segmento (acepta varias llaves y normaliza)
+        const segmentoVal = normStr(
+          row.segmento ??
+          row.Segmento ??
+          row["SEGMENTO"] ??
+          row["segmento"] ??
+          row["Segmento"] ??
+          row["Segmento Operación"] ??
+          row["SEGMENTO OPERACIÓN"] ??
+          row["segmento_operacion"] ??
+          row["segmentoOperacion"]
+        );
+
+        r.input("segmento", sql.NVarChar(50), segmentoVal || null);
+
+        // Si quieres ver en logs qué llega (Render), descomenta:
+        // console.log("SEGMENTO DEBUG =>", { raw: row.segmento, resolved: segmentoVal });
 
         r.input("fecha_servicio", sql.Date, row.fecha_servicio ? new Date(row.fecha_servicio) : null);
         r.input("placa_recorrido_1", sql.NVarChar(20), row.placa_recorrido_1);
