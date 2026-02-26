@@ -180,24 +180,44 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("conductor3", sql.Int, row.conductor3 ?? null);
         r.input("conductor4", sql.Int, row.conductor4 ?? null);
         r.input("conductor5", sql.Int, row.conductor5 ?? null);
+        r.input("conductor6", sql.Int, row.conductor6 ?? null);
+        r.input("conductor7", sql.Int, row.conductor7 ?? null);
+        r.input("conductor8", sql.Int, row.conductor8 ?? null);
+        r.input("conductor9", sql.Int, row.conductor9 ?? null);
+        r.input("conductor10", sql.Int, row.conductor10 ?? null);
 
         r.input("aar1", sql.Int, row.aar1 ?? null);
         r.input("aar2", sql.Int, row.aar2 ?? null);
         r.input("aar3", sql.Int, row.aar3 ?? null);
         r.input("aar4", sql.Int, row.aar4 ?? null);
         r.input("aar5", sql.Int, row.aar5 ?? null);
+        r.input("aar6", sql.Int, row.aar6 ?? null);
+        r.input("aar7", sql.Int, row.aar7 ?? null);
+        r.input("aar8", sql.Int, row.aar8 ?? null);
+        r.input("aar9", sql.Int, row.aar9 ?? null);
+        r.input("aar10", sql.Int, row.aar10 ?? null);
 
         r.input("estadoconductor1", sql.NVarChar(50), row.estadoconductor1 ?? null);
         r.input("estadoconductor2", sql.NVarChar(50), row.estadoconductor2 ?? null);
         r.input("estadoconductor3", sql.NVarChar(50), row.estadoconductor3 ?? null);
         r.input("estadoconductor4", sql.NVarChar(50), row.estadoconductor4 ?? null);
         r.input("estadoconductor5", sql.NVarChar(50), row.estadoconductor5 ?? null);
+        r.input("estadoconductor6", sql.NVarChar(50), row.estadoconductor6 ?? null);
+        r.input("estadoconductor7", sql.NVarChar(50), row.estadoconductor7 ?? null);
+        r.input("estadoconductor8", sql.NVarChar(50), row.estadoconductor8 ?? null);
+        r.input("estadoconductor9", sql.NVarChar(50), row.estadoconductor9 ?? null);
+        r.input("estadoconductor10", sql.NVarChar(50), row.estadoconductor10 ?? null);
 
         r.input("estadoaar1", sql.NVarChar(50), row.estadoaar1 ?? null);
         r.input("estadoaar2", sql.NVarChar(50), row.estadoaar2 ?? null);
         r.input("estadoaar3", sql.NVarChar(50), row.estadoaar3 ?? null);
         r.input("estadoaar4", sql.NVarChar(50), row.estadoaar4 ?? null);
         r.input("estadoaar5", sql.NVarChar(50), row.estadoaar5 ?? null);
+        r.input("estadoaar6", sql.NVarChar(50), row.estadoaar6 ?? null);
+        r.input("estadoaar7", sql.NVarChar(50), row.estadoaar7 ?? null);
+        r.input("estadoaar8", sql.NVarChar(50), row.estadoaar8 ?? null);
+        r.input("estadoaar9", sql.NVarChar(50), row.estadoaar9 ?? null);
+        r.input("estadoaar10", sql.NVarChar(50), row.estadoaar10 ?? null);
 
         await r.query(`
           INSERT INTO dbo.recepcion_certificados (
@@ -206,20 +226,20 @@ app.post("/recepcion-certificados", async (req, res) => {
             observacion, observacion_general, responsable, estado,
             id_grupo, maximo_transportado, ocupacion_0_r1, ocupacion_0_r2,
 
-            conductor1, conductor2, conductor3, conductor4, conductor5,
-            aar1, aar2, aar3, aar4, aar5,
-            estadoconductor1, estadoconductor2, estadoconductor3, estadoconductor4, estadoconductor5,
-            estadoaar1, estadoaar2, estadoaar3, estadoaar4, estadoaar5
+            conductor1, conductor2, conductor3, conductor4, conductor5, conductor6, conductor7, conductor8, conductor9, conductor10,
+            aar1, aar2, aar3, aar4, aar5, aar6, aar7, aar8, aar9, aar10,
+            estadoconductor1, estadoconductor2, estadoconductor3, estadoconductor4, estadoconductor5, estadoconductor6, estadoconductor7, estadoconductor8, estadoconductor9, estadoconductor10,
+            estadoaar1, estadoaar2, estadoaar3, estadoaar4, estadoaar5, estadoaar6, estadoaar7, estadoaar8, estadoaar9, estadoaar10
           ) VALUES (
             @fecha_creacion, @anio, @mes, @ut, @numero_de_contrato_oc, @numero_ruta, @segmento,
             @fecha_servicio, @placa_recorrido_1, @placa_recorrido_2,
             @observacion, @observacion_general, @responsable, @estado,
             @id_grupo, @maximo_transportado, @ocupacion_0_r1, @ocupacion_0_r2,
 
-            @conductor1, @conductor2, @conductor3, @conductor4, @conductor5,
-            @aar1, @aar2, @aar3, @aar4, @aar5,
-            @estadoconductor1, @estadoconductor2, @estadoconductor3, @estadoconductor4, @estadoconductor5,
-            @estadoaar1, @estadoaar2, @estadoaar3, @estadoaar4, @estadoaar5
+            @conductor1, @conductor2, @conductor3, @conductor4, @conductor5, @conductor6, @conductor7, @conductor8, @conductor9, @conductor10,
+            @aar1, @aar2, @aar3, @aar4, @aar5, @aar6, @aar7, @aar8, @aar9, @aar10,
+            @estadoconductor1, @estadoconductor2, @estadoconductor3, @estadoconductor4, @estadoconductor5, @estadoconductor6, @estadoconductor7, @estadoconductor8, @estadoconductor9, @estadoconductor10,
+            @estadoaar1, @estadoaar2, @estadoaar3, @estadoaar4, @estadoaar5, @estadoaar6, @estadoaar7, @estadoaar8, @estadoaar9, @estadoaar10
           )
         `);
       }
@@ -393,3 +413,4 @@ app.use((req, res) => res.status(404).json({ ok: false }));
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log("Servidor corriendo en puerto", PORT));
+
