@@ -185,6 +185,11 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("conductor8", sql.Int, row.conductor8 ?? null);
         r.input("conductor9", sql.Int, row.conductor9 ?? null);
         r.input("conductor10", sql.Int, row.conductor10 ?? null);
+        r.input("conductor11", sql.Int, row.conductor11 ?? null);
+        r.input("conductor12", sql.Int, row.conductor12 ?? null);
+        r.input("conductor13", sql.Int, row.conductor13 ?? null);
+        r.input("conductor14", sql.Int, row.conductor14 ?? null);
+        r.input("conductor15", sql.Int, row.conductor15 ?? null);
 
         r.input("aar1", sql.Int, row.aar1 ?? null);
         r.input("aar2", sql.Int, row.aar2 ?? null);
@@ -196,6 +201,11 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("aar8", sql.Int, row.aar8 ?? null);
         r.input("aar9", sql.Int, row.aar9 ?? null);
         r.input("aar10", sql.Int, row.aar10 ?? null);
+        r.input("aar11", sql.Int, row.aar11 ?? null);
+        r.input("aar12", sql.Int, row.aar12 ?? null);
+        r.input("aar13", sql.Int, row.aar13 ?? null);
+        r.input("aar14", sql.Int, row.aar14 ?? null);
+        r.input("aar15", sql.Int, row.aar15 ?? null);
 
         r.input("estadoconductor1", sql.NVarChar(50), row.estadoconductor1 ?? null);
         r.input("estadoconductor2", sql.NVarChar(50), row.estadoconductor2 ?? null);
@@ -207,6 +217,11 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("estadoconductor8", sql.NVarChar(50), row.estadoconductor8 ?? null);
         r.input("estadoconductor9", sql.NVarChar(50), row.estadoconductor9 ?? null);
         r.input("estadoconductor10", sql.NVarChar(50), row.estadoconductor10 ?? null);
+        r.input("estadoconductor11", sql.NVarChar(50), row.estadoconductor11 ?? null);
+        r.input("estadoconductor12", sql.NVarChar(50), row.estadoconductor12 ?? null);
+        r.input("estadoconductor13", sql.NVarChar(50), row.estadoconductor13 ?? null);
+        r.input("estadoconductor14", sql.NVarChar(50), row.estadoconductor14 ?? null);
+        r.input("estadoconductor15", sql.NVarChar(50), row.estadoconductor15 ?? null);
 
         r.input("estadoaar1", sql.NVarChar(50), row.estadoaar1 ?? null);
         r.input("estadoaar2", sql.NVarChar(50), row.estadoaar2 ?? null);
@@ -218,6 +233,11 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("estadoaar8", sql.NVarChar(50), row.estadoaar8 ?? null);
         r.input("estadoaar9", sql.NVarChar(50), row.estadoaar9 ?? null);
         r.input("estadoaar10", sql.NVarChar(50), row.estadoaar10 ?? null);
+        r.input("estadoaar11", sql.NVarChar(50), row.estadoaar11 ?? null);
+        r.input("estadoaar12", sql.NVarChar(50), row.estadoaar12 ?? null);
+        r.input("estadoaar13", sql.NVarChar(50), row.estadoaar13 ?? null);
+        r.input("estadoaar14", sql.NVarChar(50), row.estadoaar14 ?? null);
+        r.input("estadoaar15", sql.NVarChar(50), row.estadoaar15 ?? null);
 
         await r.query(`
           INSERT INTO dbo.recepcion_certificados (
@@ -226,20 +246,20 @@ app.post("/recepcion-certificados", async (req, res) => {
             observacion, observacion_general, responsable, estado,
             id_grupo, maximo_transportado, ocupacion_0_r1, ocupacion_0_r2,
 
-            conductor1, conductor2, conductor3, conductor4, conductor5, conductor6, conductor7, conductor8, conductor9, conductor10,
-            aar1, aar2, aar3, aar4, aar5, aar6, aar7, aar8, aar9, aar10,
-            estadoconductor1, estadoconductor2, estadoconductor3, estadoconductor4, estadoconductor5, estadoconductor6, estadoconductor7, estadoconductor8, estadoconductor9, estadoconductor10,
-            estadoaar1, estadoaar2, estadoaar3, estadoaar4, estadoaar5, estadoaar6, estadoaar7, estadoaar8, estadoaar9, estadoaar10
+            conductor1, conductor2, conductor3, conductor4, conductor5, conductor6, conductor7, conductor8, conductor9, conductor10, conductor11, conductor12, conductor13, conductor14, conductor15,
+            aar1, aar2, aar3, aar4, aar5, aar6, aar7, aar8, aar9, aar10, aar11, aar12, aar13, aar14, aar15,
+            estadoconductor1, estadoconductor2, estadoconductor3, estadoconductor4, estadoconductor5, estadoconductor6, estadoconductor7, estadoconductor8, estadoconductor9, estadoconductor10, estadoconductor11, estadoconductor12, estadoconductor13, estadoconductor14, estadoconductor15,
+            estadoaar1, estadoaar2, estadoaar3, estadoaar4, estadoaar5, estadoaar6, estadoaar7, estadoaar8, estadoaar9, estadoaar10, estadoaar11, estadoaar12, estadoaar13, estadoaar14, estadoaar15
           ) VALUES (
             @fecha_creacion, @anio, @mes, @ut, @numero_de_contrato_oc, @numero_ruta, @segmento,
             @fecha_servicio, @placa_recorrido_1, @placa_recorrido_2,
             @observacion, @observacion_general, @responsable, @estado,
             @id_grupo, @maximo_transportado, @ocupacion_0_r1, @ocupacion_0_r2,
 
-            @conductor1, @conductor2, @conductor3, @conductor4, @conductor5, @conductor6, @conductor7, @conductor8, @conductor9, @conductor10,
-            @aar1, @aar2, @aar3, @aar4, @aar5, @aar6, @aar7, @aar8, @aar9, @aar10,
-            @estadoconductor1, @estadoconductor2, @estadoconductor3, @estadoconductor4, @estadoconductor5, @estadoconductor6, @estadoconductor7, @estadoconductor8, @estadoconductor9, @estadoconductor10,
-            @estadoaar1, @estadoaar2, @estadoaar3, @estadoaar4, @estadoaar5, @estadoaar6, @estadoaar7, @estadoaar8, @estadoaar9, @estadoaar10
+            @conductor1, @conductor2, @conductor3, @conductor4, @conductor5, @conductor6, @conductor7, @conductor8, @conductor9, @conductor10, @conductor11, @conductor12, @conductor13, @conductor14, @conductor15,
+            @aar1, @aar2, @aar3, @aar4, @aar5, @aar6, @aar7, @aar8, @aar9, @aar10, @aar11, @aar12, @aar13, @aar14, @aar15,
+            @estadoconductor1, @estadoconductor2, @estadoconductor3, @estadoconductor4, @estadoconductor5, @estadoconductor6, @estadoconductor7, @estadoconductor8, @estadoconductor9, @estadoconductor10, @estadoconductor11, @estadoconductor12, @estadoconductor13, @estadoconductor14, @estadoconductor15,
+            @estadoaar1, @estadoaar2, @estadoaar3, @estadoaar4, @estadoaar5, @estadoaar6, @estadoaar7, @estadoaar8, @estadoaar9, @estadoaar10, @estadoaar11, @estadoaar12, @estadoaar13, @estadoaar14, @estadoaar15
           )
         `);
       }
