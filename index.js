@@ -192,8 +192,8 @@ app.post("/recepcion-certificados", async (req, res) => {
         r.input("fecha_servicio", sql.Date, row.fecha_servicio ? new Date(row.fecha_servicio) : null);
         r.input("placa_recorrido_1", sql.NVarChar(20), row.placa_recorrido_1);
         r.input("placa_recorrido_2", sql.NVarChar(20), row.placa_recorrido_2);
-        r.input("observacion", sql.NVarChar(255), row.observacion);
-        r.input("observacion_general", sql.NVarChar(255), row.observacion_general);
+        r.input("observacion", sql.NVarChar(sql.MAX), row.observacion);
+        r.input("observacion_general", sql.NVarChar(sql.MAX), row.observacion_general);
         r.input("responsable", sql.NVarChar(100), row.responsable);
         r.input("estado", sql.NVarChar(50), row.estado);
         r.input("id_grupo", sql.Int, row.id_grupo ?? id_grupo);
