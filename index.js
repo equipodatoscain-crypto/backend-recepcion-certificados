@@ -78,6 +78,32 @@ app.get("/vehiculo-existe/:placa", async (req, res) => {
 });
 
 /* =========================
+   OPERACION ESPERADA
+========================= */
+app.get("/placa-operacion", async (req, res) => {
+  const { fecha, ruta, recorrido } = req.query;
+  if (!fecha || !ruta || !recorrido) {
+    return res.status(400).json({ ok: false, error: "Missing params" });
+  }
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input("fecha", sql.Date, fecha)
+      .input("ruta", sql.NVarChar(510), ruta)
+      .input("recorrido", sql.NVarChar(510), recorrido)
+      .query(`SELECT TOP 1 Placa FROM dbo.operacion WHERE CAST(fecha AS DATE) = @fecha AND Ruta = @ruta AND Recorrido = @recorrido`);
+    
+    if (r.recordset.length > 0) {
+      res.json({ ok: true, placa: r.recordset[0].Placa });
+    } else {
+      res.json({ ok: true, placa: null });
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/* =========================
    CONDUCTORES / AAR
 ========================= */
 app.get("/existe-conductor/:cedula", async (req, res) => {
